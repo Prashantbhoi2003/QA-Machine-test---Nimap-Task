@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="Failed suite [Nimap FieldForceConnect Suite]" guice-stage="DEVELOPMENT">
+  <test thread-count="5" name="Add Customer Tests(failed)">
+    <classes>
+      <class name="com.nimap.tests.AddCustomerTest">
+        <methods>
+          <include name="validateAddCustomer" invocation-numbers="0 1 2 3"/>
+          <include name="setUp"/>
+          <include name="loginFirst"/>
+          <include name="tearDown"/>
+        </methods>
+      </class> <!-- com.nimap.tests.AddCustomerTest -->
+    </classes>
+  </test> <!-- Add Customer Tests(failed) -->
+</suite> <!-- Failed suite [Nimap FieldForceConnect Suite] -->

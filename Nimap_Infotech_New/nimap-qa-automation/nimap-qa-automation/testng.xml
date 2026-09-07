@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="Nimap FieldForceConnect Suite" verbose="1">
+
+    <test name="Login Tests">
+        <classes>
+            <class name="com.nimap.tests.LoginTest"/>
+        </classes>
+    </test>
+
+    <test name="PunchIn Toast Tests">
+        <classes>
+            <class name="com.nimap.tests.PunchInTest"/>
+        </classes>
+    </test>
+
+    <test name="Add Customer Tests">
+        <classes>
+            <class name="com.nimap.tests.AddCustomerTest"/>
+        </classes>
+    </test>
+
+</suite>

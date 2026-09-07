@@ -1,0 +1,282 @@
+{
+  "info": {
+    "_postman_id": "496b3450-7614-4595-919a-35d6990427ea",
+    "name": "Nimap FieldForceConnect - API Testing",
+    "description": "Postman collection for the Nimap machine test.\n\nAUTH MECHANISM (confirmed via DevTools): This app is NOT Bearer-token based. Login returns a JSON body (success/userId/CompanyDetail/...), and the frontend JS builds a 'currentUser' cookie from that JSON itself (not sent via Set-Cookie). A 'DeviceId' cookie IS sent via Set-Cookie by the server and is handled automatically by Postman's cookie jar. The Tests script on 'Login - Valid Credentials' replicates the frontend behavior by writing the currentUser cookie via pm.cookies.jar() (with an environment-variable fallback), and every authenticated request's Pre-request Script attaches it as a Cookie header.\n\nCONFIRMED endpoints: Login = POST {{base_url}}{{login_endpoint}} (/api/account/authenticate), Customer/Leads list = POST {{base_url}}{{get_customers_endpoint}} (/api/CRM/Leads).\nSTILL UNCONFIRMED: exact request-body field names for Login (guessed below - verify from the Payload tab of a real login request), and the Add Customer endpoint/payload (not yet captured from DevTools).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login - Valid Credentials",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "pm.test('Login reports success: true', function () {",
+                  "    pm.expect(jsonData.success).to.eql(true);",
+                  "});",
+                  "",
+                  "if (jsonData.success) {",
+                  "    // Frontend builds the 'currentUser' cookie from the FULL login response JSON.",
+                  "    // Server does not send it via Set-Cookie, so we replicate that here.",
+                  "    var currentUserValue = JSON.stringify(jsonData);",
+                  "    pm.environment.set('currentUser_cookie', currentUserValue);",
+                  "",
+                  "    var jar = pm.cookies.jar();",
+                  "    jar.set(pm.environment.get('base_url'), 'currentUser', currentUserValue, function (err) {",
+                  "        if (err) console.log('Cookie jar set failed, using env var fallback:', err);",
+                  "    });",
+                  "} else {",
+                  "    console.log('Login failed:', jsonData.errormessage);",
+                  "}",
+                  "",
+                  "pm.test('Response time is acceptable', function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(3000);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{valid_username}}\",\n  \"password\": \"{{valid_password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}{{login_endpoint}}",
+              "host": [
+                "{{base_url}}{{login_endpoint}}"
+              ]
+            },
+            "description": "Confirmed endpoint: POST /api/account/authenticate. Confirmed success response shape: { success: true, userId, CompanyDetail: { GroupId, CompanyId, ... }, ... }. Confirmed failure shape (still HTTP 200!): { success: false, errormessage: 'Invalid Email Id / Mobile No or Password.' } - note for the write-up: the API returns 200 even on bad credentials, so failure can only be detected from the success field, not the status code. Request body field names below (username/password) are NOT yet confirmed - open the Payload tab of a real login request in DevTools and correct the keys to match (e.g. may be EmailId/Password)."
+          }
+        },
+        {
+          "name": "Login - Invalid Credentials",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Confirmed: this API returns HTTP 200 even for a wrong password - it does NOT use 401/403.",
+                  "pm.test('Status code is 200 (API does not use 401/403 for bad login)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('success field is false for invalid credentials', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.eql(false);",
+                  "});",
+                  "",
+                  "pm.test('errormessage is present', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.errormessage).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{valid_username}}\",\n  \"password\": \"WrongPassword@999\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}{{login_endpoint}}",
+              "host": [
+                "{{base_url}}{{login_endpoint}}"
+              ]
+            },
+            "description": "Same endpoint, wrong password. This is the key negative-test finding: the API responds 200 OK with { success: false, errormessage: '...' } instead of a 4xx status - worth calling out explicitly in the submission notes as an API design observation."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Customer",
+      "item": [
+        {
+          "name": "Get Leads (Customer List)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Attach the currentUser cookie the Login request built, since Postman doesn't run",
+                  "// the frontend JS that normally creates this cookie in the browser.",
+                  "var currentUserValue = pm.environment.get('currentUser_cookie');",
+                  "if (currentUserValue) {",
+                  "    pm.request.headers.add({ key: 'Cookie', value: 'currentUser=' + currentUserValue });",
+                  "} else {",
+                  "    console.log('No currentUser_cookie set - run Login - Valid Credentials first.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "pm.test('Response has Status: 200 and Message: Success', function () {",
+                  "    pm.expect(jsonData.Status).to.eql(200);",
+                  "    pm.expect(jsonData.Message).to.eql('Success');",
+                  "});",
+                  "",
+                  "pm.test('data.Leads is an array and TotalRecords matches', function () {",
+                  "    pm.expect(jsonData.data).to.have.property('Leads').that.is.an('array');",
+                  "    pm.expect(jsonData.data).to.have.property('TotalRecords').that.is.a('number');",
+                  "});",
+                  "",
+                  "pm.test('Each lead has the expected core fields', function () {",
+                  "    var leads = jsonData.data.Leads;",
+                  "    if (leads.length > 0) {",
+                  "        pm.expect(leads[0]).to.have.property('Id');",
+                  "        pm.expect(leads[0]).to.have.property('LeadName');",
+                  "        pm.expect(leads[0]).to.have.property('MobileNo');",
+                  "        pm.expect(leads[0]).to.have.property('Email');",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test('Response time is acceptable', function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(3000);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}{{get_customers_endpoint}}",
+              "host": [
+                "{{base_url}}{{get_customers_endpoint}}"
+              ]
+            },
+            "description": "Confirmed endpoint: POST /api/CRM/Leads. Confirmed real request body (filter/pagination payload - see body). Confirmed real response shape: { Status: 200, Message: 'Success', data: { TotalRecords, Leads: [ { Id, LeadName, PersonName, StatusId, Status, MobileNo, Email, LeadTypeId/Name, LeadStageId/Name, CreatedDate, ModifiedDate, ... } ] } } - note customers are actually called 'Leads' in this API (StatusId 3 = 'Cold' stage by default for all of them here). Auth is via the currentUser + DeviceId cookies (see Pre-request Script) - not a Bearer token.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"CityId\": 0,\n  \"CountryId\": 0,\n  \"CreatedByUserIds\": \"\",\n  \"DateType\": \"ModifiedDate\",\n  \"From\": 1,\n  \"FromDate\": \"\",\n  \"LeadSourceIds\": \"\",\n  \"LeadStageIds\": \"\",\n  \"LeadStatus\": null,\n  \"LeadTypeIds\": \"\",\n  \"LocalityId\": \"\",\n  \"ReferBy\": \"\",\n  \"StateId\": 0,\n  \"StatusIds\": \"\",\n  \"TagIds\": \"\",\n  \"TerritoryIds\": \"\",\n  \"Text\": \"\",\n  \"To\": 30,\n  \"ToDate\": \"\",\n  \"UserIds\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Add Customer (Add Lead)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var currentUserValue = pm.environment.get('currentUser_cookie');",
+                  "if (currentUserValue) {",
+                  "    pm.request.headers.add({ key: 'Cookie', value: 'currentUser=' + currentUserValue });",
+                  "} else {",
+                  "    console.log('No currentUser_cookie set - run Login - Valid Credentials first.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "pm.test('Response has Status: 200 and Message: Success', function () {",
+                  "    pm.expect(jsonData.Status).to.eql(200);",
+                  "    pm.expect(jsonData.Message).to.eql('Success');",
+                  "});",
+                  "",
+                  "pm.test('New customer created with an Id, matching what was sent', function () {",
+                  "    pm.expect(jsonData.data).to.have.property('Id').that.is.a('number');",
+                  "    pm.expect(jsonData.data.LeadName).to.eql(pm.environment.get('new_customer_name'));",
+                  "    pm.environment.set('customer_id', jsonData.data.Id);",
+                  "});",
+                  "",
+                  "pm.test('Response time is acceptable', function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(3000);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"LeadId\": 0,\n  \"IsVisibleToAll\": false,\n  \"LeadName\": \"{{new_customer_name}}\",\n  \"RefNo\": \"\",\n  \"ReferredBy\": 0,\n  \"Address\": \"\",\n  \"BackView\": \"\",\n  \"CityId\": 0,\n  \"ContactNo\": \"\",\n  \"CountryId\": 0,\n  \"CustomFieldValues\": [],\n  \"Email\": \"{{new_customer_email}}\",\n  \"FrontView\": \"\",\n  \"Latitude\": 0,\n  \"LeadContacts\": [],\n  \"LeadSourceId\": 0,\n  \"LeadStageId\": 0,\n  \"LeadTags\": [],\n  \"LeadTypeId\": 0,\n  \"LocalityId\": 0,\n  \"Longitude\": 0,\n  \"MobileNo\": \"{{new_customer_mobile}}\",\n  \"OtherInfo\": \"\",\n  \"ParentLeadId\": 0,\n  \"PersonDesignation\": \"\",\n  \"PersonLocation\": \"{{new_customer_location}}\",\n  \"PersonName\": \"{{new_customer_person_name}}\",\n  \"PinCode\": \"\",\n  \"StateId\": 0,\n  \"TerritoryId\": 0,\n  \"Website\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}{{add_customer_endpoint}}",
+              "host": [
+                "{{base_url}}{{add_customer_endpoint}}"
+              ]
+            },
+            "description": "Confirmed endpoint: POST /api/CRM/Lead. Confirmed request body (see Payload tab findings - LeadName/PersonName/MobileNo/Email/PersonLocation from the form, rest default to 0/empty/[]). Confirmed response: { Status: 200, Message: 'Success', Errors: null, data: { Id, LeadName, PersonName, StatusId: 3 ('Cold' by default), LeadTypeId: 1 ('Retailer / Sub Dealer' - the default lead type), LeadStageId: 1 ('Enquiry' - the default stage), CreatedDate, ModifiedDate, UserId, UserName, products: [], ... } } - same shape as one entry in the Get Leads array, confirming Add Customer and Get Leads both operate on the same underlying 'Lead' entity. Auth via the currentUser + DeviceId cookies (see Pre-request Script) - not a Bearer token."
+          }
+        }
+      ]
+    }
+  ]
+}
