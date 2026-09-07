@@ -30,7 +30,7 @@ nimap-qa-automation/
 ## ⚠️ Key Test Finding & Bug Summary
 
 During execution against `https://test.fieldforceconnect.com/`:
-- Login Journey** and Add Customer modules were verified and automated via parameterized DataProviders.
+- Login Journey and Add Customer modules were verified and automated via parameterized DataProviders.
 - PunchIn Verification was blocked because the PunchIn button was missing/invisible on the Dashboard page.
 - This issue has been logged as `BUG_01` in `FieldForceConnect_PunchIn_Bug_Report.xlsx`.
 
